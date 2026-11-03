@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { TicketConfig } from '../types/ticket';
 import { TicketItem } from './TicketItem';
 import { getPaperSizeMm, PAPER_DIMENSIONS } from '../utils/paperConstants';
-import { generatePdfFromElements, PdfGenerationProgress } from '../utils/pdfGenerator';
+import { generatePdfFromElements, PdfGenerationProgress, PdfQualityMode } from '../utils/pdfGenerator';
 import { PrintExportModal, PrintExportMode } from './PrintExportModal';
 import { formatPageRange } from '../utils/pageRangeParser';
 import {
@@ -63,13 +63,16 @@ export const TicketPreviewSheet: React.FC<TicketPreviewSheetProps> = ({
   // Staging renderer for PDF generation: renders a specific page into the DOM and returns the element
   const renderPageForExport = async (pageIdx: number): Promise<HTMLElement | null> => {
     setExportingPageIndex(pageIdx);
-    // Wait for React render cycle & images to settle
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    // Instant frame sync with double RAF instead of slow artificial sleep
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     return document.getElementById('pdf-export-stage');
   };
 
   // Execute PDF generation for chosen page indices
-  const handleExecutePdfExport = async (selectedPages: number[]) => {
+  const handleExecutePdfExport = async (
+    selectedPages: number[],
+    qualityMode: PdfQualityMode = 'turbo'
+  ) => {
     if (isExporting) return;
     setIsExporting(true);
     setModalMode(null);
@@ -85,7 +88,8 @@ export const TicketPreviewSheet: React.FC<TicketPreviewSheetProps> = ({
         ticketNumbers,
         renderPageForExport,
         selectedPages,
-        (progress) => setExportProgress(progress)
+        (progress) => setExportProgress(progress),
+        qualityMode
       );
 
       const url = URL.createObjectURL(blob);
@@ -445,9 +449,9 @@ export const TicketPreviewSheet: React.FC<TicketPreviewSheetProps> = ({
           ticketsPerPage={ticketsPerPage}
           ticketNumbers={ticketNumbers}
           config={config}
-          onConfirm={(selectedPages) => {
+          onConfirm={(selectedPages, quality) => {
             if (modalMode === 'pdf') {
-              handleExecutePdfExport(selectedPages);
+              handleExecutePdfExport(selectedPages, quality);
             } else {
               handleExecutePrint(selectedPages);
             }

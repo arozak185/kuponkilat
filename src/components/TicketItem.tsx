@@ -12,7 +12,7 @@ interface TicketItemProps {
   style?: React.CSSProperties;
 }
 
-export const TicketItem: React.FC<TicketItemProps> = ({
+export const TicketItem: React.FC<TicketItemProps> = React.memo(({
   ticketNumber,
   config,
   className = '',
@@ -23,32 +23,34 @@ export const TicketItem: React.FC<TicketItemProps> = ({
   const isEcoOutline = ticketStyle.theme === 'eco-outline';
   const isInkSaver = ticketStyle.theme === 'ink-saver' || isEcoOutline;
 
-  const cacheKey = `${ticketNumber}|${event.title}`;
-  const [qrSrc, setQrSrc] = useState<string>(() => getCachedQr(cacheKey) || '');
+  const showBarcode = !!event.showBarcode;
+  const cacheKey = showBarcode ? `${ticketNumber}|${event.title}` : '';
+  const [qrSrc, setQrSrc] = useState<string>(() =>
+    showBarcode && event.barcodeType === 'qr' ? getCachedQr(cacheKey) || '' : ''
+  );
   const [barcodeSvg, setBarcodeSvg] = useState<string>(() =>
-    event.barcodeType === 'barcode' ? generateBarcodeSvg(ticketNumber, 110, 32) : ''
+    showBarcode && event.barcodeType === 'barcode' ? generateBarcodeSvg(ticketNumber, 110, 32) : ''
   );
 
   useEffect(() => {
+    if (!showBarcode) return;
     let active = true;
-    if (event.showBarcode) {
-      if (event.barcodeType === 'qr') {
-        const cached = getCachedQr(cacheKey);
-        if (cached) {
-          setQrSrc(cached);
-        } else {
-          getQrDataUrl(cacheKey).then((url) => {
-            if (active) setQrSrc(url);
-          });
-        }
+    if (event.barcodeType === 'qr') {
+      const cached = getCachedQr(cacheKey);
+      if (cached) {
+        setQrSrc(cached);
       } else {
-        setBarcodeSvg(generateBarcodeSvg(ticketNumber, 110, 32));
+        getQrDataUrl(cacheKey).then((url) => {
+          if (active) setQrSrc(url);
+        });
       }
+    } else {
+      setBarcodeSvg(generateBarcodeSvg(ticketNumber, 110, 32));
     }
     return () => {
       active = false;
     };
-  }, [ticketNumber, event.showBarcode, event.barcodeType, event.title, cacheKey]);
+  }, [ticketNumber, showBarcode, event.barcodeType, event.title, cacheKey]);
 
   const borderStyleClass =
     layout.cutLineStyle === 'dashed'
@@ -274,7 +276,7 @@ export const TicketItem: React.FC<TicketItemProps> = ({
       )}
     </div>
   );
-};
+});
 
 interface StubProps {
   config: TicketConfig;

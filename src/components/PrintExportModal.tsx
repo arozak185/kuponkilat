@@ -2,15 +2,16 @@ import React, { useState, useMemo } from 'react';
 import { parsePageRange, formatPageRange } from '../utils/pageRangeParser';
 import { TicketConfig } from '../types/ticket';
 import { PAPER_DIMENSIONS } from '../utils/paperConstants';
+import { PdfQualityMode } from '../utils/pdfGenerator';
 import {
   X,
   Download,
   Printer,
   FileText,
   CheckCircle2,
-  AlertCircle,
-  Layers,
+  Zap,
   Sparkles,
+  Info,
 } from 'lucide-react';
 
 export type PrintExportMode = 'pdf' | 'print';
@@ -24,14 +25,14 @@ interface PrintExportModalProps {
   ticketsPerPage: number;
   ticketNumbers: string[];
   config: TicketConfig;
-  onConfirm: (selectedPageIndices: number[]) => void;
+  onConfirm: (selectedPageIndices: number[], qualityMode: PdfQualityMode) => void;
   isProcessing?: boolean;
 }
 
 export const PrintExportModal: React.FC<PrintExportModalProps> = ({
   isOpen,
   onClose,
-  mode,
+  mode: initialMode,
   totalPages,
   currentPage,
   ticketsPerPage,
@@ -40,6 +41,8 @@ export const PrintExportModal: React.FC<PrintExportModalProps> = ({
   onConfirm,
   isProcessing,
 }) => {
+  const [activeMode, setActiveMode] = useState<PrintExportMode>(initialMode);
+  const [qualityMode, setQualityMode] = useState<PdfQualityMode>('turbo');
   const [rangeType, setRangeType] = useState<'all' | 'current' | 'custom'>('all');
   const [customRangeText, setCustomRangeText] = useState<string>(
     totalPages > 5 ? '1-5' : `1-${totalPages}`
@@ -87,35 +90,34 @@ export const PrintExportModal: React.FC<PrintExportModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-in fade-in">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-          <div className="flex items-center gap-2.5">
-            <div
-              className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-xs ${
-                mode === 'pdf'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-800 text-white'
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[92vh]">
+        {/* Header with Mode Tabs */}
+        <div className="px-6 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
+          <div className="flex items-center gap-1.5 bg-slate-200/80 p-1 rounded-xl">
+            <button
+              onClick={() => setActiveMode('pdf')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                activeMode === 'pdf'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              {mode === 'pdf' ? (
-                <Download className="w-5 h-5" />
-              ) : (
-                <Printer className="w-5 h-5" />
-              )}
-            </div>
-            <div>
-              <h2 className="font-extrabold text-base text-slate-900 leading-tight">
-                {mode === 'pdf'
-                  ? 'Pengaturan Ekspor PDF'
-                  : 'Pengaturan Cetak Kupon'}
-              </h2>
-              <p className="text-xs text-slate-500">
-                Pilih halaman atau tentukan rentang lembar yang ingin{' '}
-                {mode === 'pdf' ? 'diunduh' : 'dicetak'}
-              </p>
-            </div>
+              <Download className="w-3.5 h-3.5" />
+              <span>Download PDF</span>
+            </button>
+            <button
+              onClick={() => setActiveMode('print')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                activeMode === 'print'
+                  ? 'bg-slate-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Cetak Printer (0 Detik)</span>
+            </button>
           </div>
+
           <button
             onClick={onClose}
             disabled={isProcessing}
@@ -126,7 +128,7 @@ export const PrintExportModal: React.FC<PrintExportModalProps> = ({
         </div>
 
         {/* Body content */}
-        <div className="p-6 space-y-4 text-xs">
+        <div className="p-6 overflow-y-auto space-y-4 text-xs">
           {/* Paper and total summary */}
           <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between text-slate-700">
             <div className="flex items-center gap-2">
@@ -146,7 +148,7 @@ export const PrintExportModal: React.FC<PrintExportModalProps> = ({
           {/* Range Selection Radio Options */}
           <div className="space-y-2">
             <label className="block font-bold text-slate-800">
-              Pilihan Halaman / Lembar:
+              Pilih Lembar Halaman yang Ingin Di-{activeMode === 'pdf' ? 'Download' : 'Cetak'}:
             </label>
 
             {/* Option 1: All Pages */}
@@ -172,7 +174,7 @@ export const PrintExportModal: React.FC<PrintExportModalProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 mt-0.5 font-normal">
-                  Ekspor/cetak seluruh {ticketNumbers.length} kupon tanpa terlewat.
+                  Seluruh {ticketNumbers.length} kupon tanpa terlewat.
                 </p>
               </div>
             </label>
@@ -200,7 +202,7 @@ export const PrintExportModal: React.FC<PrintExportModalProps> = ({
                   <span className="text-[11px] font-mono text-slate-500">1 lembar</span>
                 </div>
                 <p className="text-[11px] text-slate-500 mt-0.5 font-normal">
-                  Hanya lembar kupon yang saat ini aktif ditampilkan di layar.
+                  Hanya lembar kupon yang sedang aktif ditampilkan di layar.
                 </p>
               </div>
             </label>
@@ -284,6 +286,70 @@ export const PrintExportModal: React.FC<PrintExportModalProps> = ({
             </label>
           </div>
 
+          {/* Speed & Quality Mode (For PDF Mode) */}
+          {activeMode === 'pdf' && (
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Kecepatan Pembuatan Dokumen PDF:</span>
+                </span>
+                <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  Optimized
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setQualityMode('turbo')}
+                  className={`p-2 rounded-lg border text-left cursor-pointer transition-all ${
+                    qualityMode === 'turbo'
+                      ? 'bg-white border-indigo-600 text-indigo-900 font-bold shadow-2xs'
+                      : 'bg-white/60 border-slate-200 text-slate-600 hover:bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-1">
+                    <span className="text-amber-500">⚡</span>
+                    <span>Turbo Cepat (~1-2 Detik)</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-normal mt-0.5">
+                    Native browser render, sangat cepat & tajam HD
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setQualityMode('hd')}
+                  className={`p-2 rounded-lg border text-left cursor-pointer transition-all ${
+                    qualityMode === 'hd'
+                      ? 'bg-white border-indigo-600 text-indigo-900 font-bold shadow-2xs'
+                      : 'bg-white/60 border-slate-200 text-slate-600 hover:bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-indigo-500" />
+                    <span>Ultra HD (210 DPI)</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-normal mt-0.5">
+                    Resolusi tertinggi untuk cetak offset besar
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Instant Vector Print Tip Banner */}
+          <div className="bg-sky-50 border border-sky-200 rounded-xl p-3 text-sky-950 flex items-start gap-2.5">
+            <Info className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+            <div className="text-[11px] leading-relaxed">
+              <span className="font-bold block text-sky-900">
+                Tips Cetak & Simpan PDF Super Cepat (0 Detik / Tanpa Loading):
+              </span>
+              Pilih tab <b>Cetak Printer</b> di atas lalu klik tombol Cetak. Di jendela print komputer Anda, pilih printer fisik atau pilih tujuan <b>"Simpan sebagai PDF (Save as PDF)"</b>. Prosesnya instan 0 detik dan hasilnya 100% vektor tajam!
+            </div>
+          </div>
+
           {/* Selected Pages & Ticket Preview Feedback Box */}
           <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 text-emerald-950 space-y-1">
             <div className="flex items-center justify-between font-bold text-xs text-emerald-900">
@@ -309,7 +375,7 @@ export const PrintExportModal: React.FC<PrintExportModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2">
+        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
           <button
             type="button"
             onClick={onClose}
@@ -322,9 +388,9 @@ export const PrintExportModal: React.FC<PrintExportModalProps> = ({
           <button
             type="button"
             disabled={selectedIndices.length === 0 || isProcessing}
-            onClick={() => onConfirm(selectedIndices)}
-            className={`px-5 py-2 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-sm active:scale-95 disabled:opacity-50 ${
-              mode === 'pdf'
+            onClick={() => onConfirm(selectedIndices, qualityMode)}
+            className={`px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-sm active:scale-95 disabled:opacity-50 ${
+              activeMode === 'pdf'
                 ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
                 : 'bg-slate-800 hover:bg-slate-900 text-white'
             }`}
@@ -332,9 +398,9 @@ export const PrintExportModal: React.FC<PrintExportModalProps> = ({
             {isProcessing ? (
               <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Memproses...</span>
+                <span>Memproses Cepat...</span>
               </>
-            ) : mode === 'pdf' ? (
+            ) : activeMode === 'pdf' ? (
               <>
                 <Download className="w-4 h-4" />
                 <span>Download PDF ({selectedIndices.length} Lembar)</span>
