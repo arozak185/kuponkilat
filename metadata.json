@@ -1,0 +1,6 @@
+{
+  "name": "KuponKilat - Generator Kupon Undian Masal",
+  "description": "Aplikasi pembuat dan pencetak kupon undian masal untuk berbagai acara (jalan sehat, doorprize, bazar) dengan penomoran kustom, barcode/QR, logo, layout fleksibel berbagai kertas, ekspor PDF dan mesin undian.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
