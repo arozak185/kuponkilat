@@ -3,6 +3,8 @@ import { TicketConfig } from '../types/ticket';
 import { TicketItem } from './TicketItem';
 import { getPaperSizeMm, PAPER_DIMENSIONS } from '../utils/paperConstants';
 import { generatePdfFromElements, PdfGenerationProgress } from '../utils/pdfGenerator';
+import { PrintExportModal, PrintExportMode } from './PrintExportModal';
+import { formatPageRange } from '../utils/pageRangeParser';
 import {
   ChevronLeft,
   ChevronRight,
@@ -13,19 +15,18 @@ import {
   Printer,
   Download,
   CheckCircle2,
-  Check,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 interface TicketPreviewSheetProps {
   config: TicketConfig;
   ticketNumbers: string[];
-  onPrint: () => void;
+  onPrint?: () => void;
 }
 
 export const TicketPreviewSheet: React.FC<TicketPreviewSheetProps> = ({
   config,
   ticketNumbers,
-  onPrint,
 }) => {
   const [currentPage, setCurrentPage] = useState<number>(0);
   const [zoomLevel, setZoomLevel] = useState<number>(85); // 85% default fits nicely
@@ -34,6 +35,11 @@ export const TicketPreviewSheet: React.FC<TicketPreviewSheetProps> = ({
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [exportProgress, setExportProgress] = useState<PdfGenerationProgress | null>(null);
   const [exportingPageIndex, setExportingPageIndex] = useState<number | null>(null);
+
+  // Print/Export Modal State
+  const [modalMode, setModalMode] = useState<PrintExportMode | null>(null);
+  // Specific pages to render in print container
+  const [printPageIndices, setPrintPageIndices] = useState<number[]>([]);
 
   const { layout } = config;
   const cols = Math.max(1, layout.columns);
@@ -62,16 +68,23 @@ export const TicketPreviewSheet: React.FC<TicketPreviewSheetProps> = ({
     return document.getElementById('pdf-export-stage');
   };
 
-  const handleDownloadPdf = async () => {
+  // Execute PDF generation for chosen page indices
+  const handleExecutePdfExport = async (selectedPages: number[]) => {
     if (isExporting) return;
     setIsExporting(true);
-    setExportProgress({ current: 0, total: totalPages, status: 'Menyiapkan generator PDF...' });
+    setModalMode(null);
+    setExportProgress({
+      current: 0,
+      total: selectedPages.length,
+      status: `Menyiapkan generator PDF (${selectedPages.length} lembar)...`,
+    });
 
     try {
       const blob = await generatePdfFromElements(
         config,
         ticketNumbers,
         renderPageForExport,
+        selectedPages,
         (progress) => setExportProgress(progress)
       );
 
@@ -79,7 +92,11 @@ export const TicketPreviewSheet: React.FC<TicketPreviewSheetProps> = ({
       const link = document.createElement('a');
       link.href = url;
       const cleanTitle = (config.event.title || 'Kupon_Undian').replace(/[^a-zA-Z0-9_-]/g, '_');
-      link.setAttribute('download', `Kupon_${cleanTitle}_${config.layout.paperSize}.pdf`);
+      const pageSuffix =
+        selectedPages.length === totalPages
+          ? 'Semua'
+          : `Halaman_${formatPageRange(selectedPages).replace(/[\s,]+/g, '_')}`;
+      link.setAttribute('download', `Kupon_${cleanTitle}_${config.layout.paperSize}_${pageSuffix}.pdf`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -92,6 +109,16 @@ export const TicketPreviewSheet: React.FC<TicketPreviewSheetProps> = ({
       setExportProgress(null);
       setExportingPageIndex(null);
     }
+  };
+
+  // Execute print for chosen page indices
+  const handleExecutePrint = (selectedPages: number[]) => {
+    setPrintPageIndices(selectedPages);
+    setModalMode(null);
+    // Give react time to render selected pages into #print-root before opening print dialog
+    setTimeout(() => {
+      window.print();
+    }, 150);
   };
 
   return (
@@ -170,20 +197,20 @@ export const TicketPreviewSheet: React.FC<TicketPreviewSheetProps> = ({
 
           {/* Cetak Browser Button */}
           <button
-            onClick={onPrint}
+            onClick={() => setModalMode('print')}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 text-white hover:bg-slate-900 transition-colors shadow-xs cursor-pointer active:scale-95"
-            title="Cetak langsung ke printer Anda"
+            title="Pilih halaman & cetak langsung ke printer"
           >
             <Printer className="w-4 h-4" />
             <span>Cetak (Print)</span>
           </button>
 
-          {/* Unduh PDF Button */}
+          {/* Unduh PDF Button with Page Range Customizer */}
           <button
-            onClick={handleDownloadPdf}
+            onClick={() => setModalMode('pdf')}
             disabled={isExporting}
             className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-400 transition-all shadow-sm cursor-pointer active:scale-95"
-            title="Unduh dokumen PDF yang 100% sama persis dengan preview"
+            title="Pilih halaman (misal 1-5) dan unduh PDF siap cetak"
           >
             {isExporting ? (
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -267,7 +294,7 @@ export const TicketPreviewSheet: React.FC<TicketPreviewSheetProps> = ({
         <div className="flex items-center gap-1.5 text-slate-600">
           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
           <span>
-            Preview lembar presisi 1:1. Hasil ekspor PDF dijamin sama persis dengan yang Anda lihat di layar.
+            Bisa ekspor atau cetak halaman tertentu saja (misal halaman 1-5, halaman ganjil, dll).
           </span>
         </div>
         <div className="font-mono text-slate-500">
@@ -277,7 +304,6 @@ export const TicketPreviewSheet: React.FC<TicketPreviewSheetProps> = ({
 
       {/* ============================================================== */}
       {/* EXPORT STAGING CONTAINER (EXACT 1:1 SCREEN PIXELS, BEHIND UI) */}
-      {/* This renders the exact page being captured into the PDF document */}
       {/* ============================================================== */}
       {exportingPageIndex !== null && (
         <div
@@ -326,6 +352,7 @@ export const TicketPreviewSheet: React.FC<TicketPreviewSheetProps> = ({
 
       {/* ============================================================== */}
       {/* HIDDEN PRINT CONTAINER FOR BROWSER PRINT (window.print())       */}
+      {/* Renders ONLY the pages selected by user (e.g. pages 1-5)      */}
       {/* ============================================================== */}
       <div id="print-root" className="hidden print:block">
         <style>{`
@@ -361,7 +388,10 @@ export const TicketPreviewSheet: React.FC<TicketPreviewSheetProps> = ({
             }
           }
         `}</style>
-        {Array.from({ length: totalPages }).map((_, pIdx) => {
+        {(printPageIndices.length > 0
+          ? printPageIndices
+          : Array.from({ length: totalPages }, (_, i) => i)
+        ).map((pIdx) => {
           const sheetNumbers = ticketNumbers.slice(
             pIdx * ticketsPerPage,
             (pIdx + 1) * ticketsPerPage
@@ -401,6 +431,30 @@ export const TicketPreviewSheet: React.FC<TicketPreviewSheetProps> = ({
           );
         })}
       </div>
+
+      {/* ============================================================== */}
+      {/* PRINT & EXPORT PAGE RANGE SELECTION MODAL                      */}
+      {/* ============================================================== */}
+      {modalMode && (
+        <PrintExportModal
+          isOpen={true}
+          onClose={() => setModalMode(null)}
+          mode={modalMode}
+          totalPages={totalPages}
+          currentPage={safePage}
+          ticketsPerPage={ticketsPerPage}
+          ticketNumbers={ticketNumbers}
+          config={config}
+          onConfirm={(selectedPages) => {
+            if (modalMode === 'pdf') {
+              handleExecutePdfExport(selectedPages);
+            } else {
+              handleExecutePrint(selectedPages);
+            }
+          }}
+          isProcessing={isExporting}
+        />
+      )}
     </div>
   );
 };

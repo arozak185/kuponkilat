@@ -15,6 +15,7 @@ export async function generatePdfFromElements(
   config: TicketConfig,
   ticketNumbers: string[],
   renderPage: (pageIndex: number) => Promise<HTMLElement | null>,
+  pageIndicesToExport?: number[],
   onProgress?: (progress: PdfGenerationProgress) => void
 ): Promise<Blob> {
   const { layout, event } = config;
@@ -27,10 +28,20 @@ export async function generatePdfFromElements(
   const ticketsPerPage = cols * rows;
   const totalPages = Math.max(1, Math.ceil(ticketNumbers.length / ticketsPerPage));
 
-  // 1. Preload QR Codes for all tickets so they are instant and never blank
+  // Determine which pages to generate
+  const pagesToProcess =
+    pageIndicesToExport && pageIndicesToExport.length > 0
+      ? pageIndicesToExport.filter((p) => p >= 0 && p < totalPages)
+      : Array.from({ length: totalPages }, (_, i) => i);
+
+  if (pagesToProcess.length === 0) {
+    throw new Error('Tidak ada halaman yang dipilih untuk diekspor.');
+  }
+
+  // 1. Preload QR Codes if needed
   if (event.showBarcode && event.barcodeType === 'qr') {
     if (onProgress) {
-      onProgress({ current: 0, total: totalPages, status: 'Menyiapkan kode QR...' });
+      onProgress({ current: 0, total: pagesToProcess.length, status: 'Menyiapkan kode QR...' });
     }
     await preloadQrCodes(ticketNumbers, event.title);
   }
@@ -43,13 +54,15 @@ export async function generatePdfFromElements(
     compress: true,
   });
 
-  // 3. Render and capture each sheet sequentially
-  for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+  // 3. Render and capture each selected sheet sequentially
+  for (let i = 0; i < pagesToProcess.length; i++) {
+    const pageIdx = pagesToProcess[i];
+
     if (onProgress) {
       onProgress({
-        current: pageIdx + 1,
-        total: totalPages,
-        status: `Memproses halaman ${pageIdx + 1} dari ${totalPages}...`,
+        current: i + 1,
+        total: pagesToProcess.length,
+        status: `Memproses lembar ${pageIdx + 1} (${i + 1} dari ${pagesToProcess.length} dipilih)...`,
       });
     }
 
@@ -83,7 +96,7 @@ export async function generatePdfFromElements(
       });
     }
 
-    if (pageIdx > 0) {
+    if (i > 0) {
       doc.addPage([pageWidth, pageHeight], layout.orientation);
     }
 
@@ -92,7 +105,11 @@ export async function generatePdfFromElements(
   }
 
   if (onProgress) {
-    onProgress({ current: totalPages, total: totalPages, status: 'Menyelesaikan dokumen PDF...' });
+    onProgress({
+      current: pagesToProcess.length,
+      total: pagesToProcess.length,
+      status: 'Menyelesaikan dokumen PDF...',
+    });
   }
 
   return doc.output('blob');
